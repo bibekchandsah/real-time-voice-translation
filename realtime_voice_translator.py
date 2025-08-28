@@ -27,6 +27,10 @@ class RealtimeVoiceTranslator:
         self.is_recording = False
         self.is_translating = False
         
+        # Minimized window
+        self.minimized_window = None
+        self.is_minimized = False
+        
         # Audio settings
         self.chunk_size = 1024
         self.sample_rate = 16000
@@ -50,7 +54,8 @@ class RealtimeVoiceTranslator:
                 'target_language': 'English',
                 'audio_threshold': 500,  # Minimum audio level to process
                 'translation_model': 'gpt-4o-audio-preview',
-                'selected_audio_model': 'gpt-4o-audio-preview'
+                'selected_audio_model': 'gpt-4o-audio-preview',
+                'enable_minimized': False
             }
             self.save_config()
     
@@ -84,6 +89,97 @@ class RealtimeVoiceTranslator:
         except ImportError:
             self.gemini_client = None
             print("Gemini not available. Install google-generativeai: pip install google-generativeai")
+    
+    def get_language_flag_and_name(self, language_code):
+        """Get country flag and language name from language code"""
+        language_map = {
+            'en': ('🇺🇸', 'English'),
+            'es': ('🇪🇸', 'Spanish'),
+            'fr': ('🇫🇷', 'French'),
+            'de': ('🇩🇪', 'German'),
+            'zh': ('🇨🇳', 'Chinese'),
+            'ja': ('🇯🇵', 'Japanese'),
+            'ko': ('🇰🇷', 'Korean'),
+            'hi': ('🇮🇳', 'Hindi'),
+            'th': ('🇹🇭', 'Thai'),
+            'id': ('🇮🇩', 'Indonesian'),
+            'vi': ('🇻🇳', 'Vietnamese'),
+            'ar': ('🇸🇦', 'Arabic'),
+            'ru': ('🇷🇺', 'Russian'),
+            'pt': ('🇧🇷', 'Portuguese'),
+            'it': ('🇮🇹', 'Italian'),
+            'nl': ('🇳🇱', 'Dutch'),
+            'pl': ('🇵🇱', 'Polish'),
+            'tr': ('🇹🇷', 'Turkish'),
+            'sv': ('🇸🇪', 'Swedish'),
+            'da': ('🇩🇰', 'Danish'),
+            'no': ('🇳🇴', 'Norwegian'),
+            'fi': ('🇫🇮', 'Finnish'),
+            'he': ('🇮🇱', 'Hebrew'),
+            'cs': ('🇨🇿', 'Czech'),
+            'hu': ('🇭🇺', 'Hungarian'),
+            'ro': ('🇷🇴', 'Romanian'),
+            'bg': ('🇧🇬', 'Bulgarian'),
+            'hr': ('🇭🇷', 'Croatian'),
+            'sk': ('🇸🇰', 'Slovak'),
+            'sl': ('🇸🇮', 'Slovenian'),
+            'et': ('🇪🇪', 'Estonian'),
+            'lv': ('🇱🇻', 'Latvian'),
+            'lt': ('🇱🇹', 'Lithuanian'),
+            'uk': ('🇺🇦', 'Ukrainian'),
+            'be': ('🇧🇾', 'Belarusian'),
+            'mk': ('🇲🇰', 'Macedonian'),
+            'sq': ('🇦🇱', 'Albanian'),
+            'sr': ('🇷🇸', 'Serbian'),
+            'bs': ('🇧🇦', 'Bosnian'),
+            'me': ('🇲🇪', 'Montenegrin'),
+            'is': ('🇮🇸', 'Icelandic'),
+            'ga': ('🇮🇪', 'Irish'),
+            'cy': ('🏴󠁧󠁢󠁷󠁬󠁳󠁿', 'Welsh'),
+            'mt': ('🇲🇹', 'Maltese'),
+            'eu': ('🏴󠁥󠁳󠁰󠁶󠁿', 'Basque'),
+            'ca': ('🏴󠁥󠁳󠁣󠁴󠁿', 'Catalan'),
+            'gl': ('🏴󠁥󠁳󠁧󠁡󠁿', 'Galician'),
+        }
+        
+        # Try to match by language code
+        if language_code.lower() in language_map:
+            return language_map[language_code.lower()]
+        
+        # Try to match by language name
+        for code, (flag, name) in language_map.items():
+            if name.lower() == language_code.lower():
+                return flag, name
+        
+        # Default fallback
+        return '🌐', language_code.title()
+    
+    def detect_language_from_text(self, text):
+        """Detect language from text using OpenAI"""
+        try:
+            if not self.client:
+                return 'unknown', 0
+            
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Detect the language of this text and return only the language code (like 'en', 'es', 'th', 'id', etc.) and confidence percentage (0-100). Format: 'language_code,confidence'. Text: '{text}'"
+                    }
+                ]
+            )
+            
+            result = response.choices[0].message.content.strip()
+            if ',' in result:
+                lang_code, confidence = result.split(',')
+                return lang_code.strip(), int(confidence.strip().replace('%', ''))
+            else:
+                return result.strip(), 85  # Default confidence
+                
+        except Exception as e:
+            print(f"Language detection error: {e}")
+            return 'unknown', 0
     
     def setup_gui(self):
         """Setup the GUI"""
@@ -168,7 +264,7 @@ class RealtimeVoiceTranslator:
         
         self.target_lang_var = tk.StringVar(value=self.config.get('target_language', 'English'))
         target_lang_combo = ttk.Combobox(lang_frame, textvariable=self.target_lang_var,
-                                       values=['English', 'Spanish', 'French', 'German', 'Chinese', 'Japanese'],
+                                       values=['English', 'Nepali', 'Hindi', 'Spanish', 'French', 'German', 'Chinese', 'Japanese'],
                                        state='readonly', width=15)
         target_lang_combo.pack(side=tk.LEFT, padx=(10, 0))
         
@@ -264,6 +360,26 @@ class RealtimeVoiceTranslator:
         
         # Always on top
         self.root.attributes('-topmost', True)
+        
+        # Minimized translator checkbox
+        minimized_frame = tk.Frame(main_frame, bg=self.colors['bg'])
+        minimized_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.minimized_var = tk.BooleanVar(value=self.config.get('enable_minimized', False))
+        self.minimized_cb = tk.Checkbutton(
+            minimized_frame,
+            text="📱 Enable Minimized Translator",
+            variable=self.minimized_var,
+            command=self.toggle_minimized_mode,
+            bg=self.colors['bg'],
+            fg=self.colors['text'],
+            selectcolor=self.colors['secondary'],
+            activebackground=self.colors['bg'],
+            activeforeground=self.colors['accent'],
+            font=('Arial', 10),
+            relief='flat'
+        )
+        self.minimized_cb.pack(anchor=tk.W)
     
     def save_settings(self):
         """Save current settings"""
@@ -298,6 +414,89 @@ class RealtimeVoiceTranslator:
     def clear_translations(self):
         """Clear all translations from display"""
         self.translation_text.delete('1.0', tk.END)
+        if self.minimized_window and hasattr(self.minimized_window, 'translation_text'):
+            self.minimized_window.translation_text.delete('1.0', tk.END)
+    
+    def toggle_minimized_mode(self):
+        """Toggle minimized translator mode"""
+        self.config['enable_minimized'] = self.minimized_var.get()
+        self.save_config()
+        
+        if self.minimized_var.get():
+            self.create_minimized_window()
+        else:
+            self.close_minimized_window()
+    
+    def create_minimized_window(self):
+        """Create minimized translator window"""
+        if self.minimized_window:
+            return
+        
+        self.minimized_window = tk.Toplevel(self.root)
+        self.minimized_window.title("🌍 Mini Translator")
+        
+        # Position at top-right corner
+        screen_width = self.minimized_window.winfo_screenwidth()
+        window_width = 400
+        window_height = 300
+        x_pos = screen_width - window_width - 20
+        y_pos = 20
+        
+        self.minimized_window.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
+        self.minimized_window.configure(bg=self.colors['bg'])
+        self.minimized_window.attributes('-topmost', True)
+        self.minimized_window.attributes('-alpha', 0.95)
+        
+        # Prevent window from being closed directly
+        self.minimized_window.protocol("WM_DELETE_WINDOW", self.on_minimized_close)
+        
+        # Header
+        header_frame = tk.Frame(self.minimized_window, bg=self.colors['secondary'])
+        header_frame.pack(fill=tk.X, padx=2, pady=2)
+        
+        title_label = tk.Label(header_frame, text="🌍 Live Translation", 
+                              font=('Arial', 10, 'bold'),
+                              fg=self.colors['text'], bg=self.colors['secondary'])
+        title_label.pack(side=tk.LEFT, padx=5, pady=3)
+        
+        # Close button
+        close_btn = tk.Button(header_frame, text="✕", 
+                             command=self.close_minimized_window,
+                             bg=self.colors['error'], fg='white',
+                             font=('Arial', 8, 'bold'), relief='flat',
+                             padx=5, pady=1)
+        close_btn.pack(side=tk.RIGHT, padx=2)
+        
+        # Translation display
+        self.minimized_window.translation_text = scrolledtext.ScrolledText(
+            self.minimized_window,
+            wrap=tk.WORD,
+            height=15,
+            bg=self.colors['secondary'],
+            fg=self.colors['text'],
+            font=('Arial', 9),
+            insertbackground=self.colors['text'],
+            relief='flat',
+            bd=0
+        )
+        self.minimized_window.translation_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0, 5))
+        
+        self.is_minimized = True
+    
+    def close_minimized_window(self):
+        """Close minimized translator window"""
+        if self.minimized_window:
+            self.minimized_window.destroy()
+            self.minimized_window = None
+        
+        self.is_minimized = False
+        self.minimized_var.set(False)
+        self.config['enable_minimized'] = False
+        self.save_config()
+    
+    def on_minimized_close(self):
+        """Handle minimized window close event"""
+        self.close_minimized_window()
     
     def start_translation(self):
         """Start real-time translation"""
@@ -458,8 +657,18 @@ class RealtimeVoiceTranslator:
             # Encode to base64
             encoded_audio = base64.b64encode(wav_data).decode('utf-8')
             
-            # Create prompt for translation
-            prompt = f"Listen to this audio and translate any speech you hear to {target_lang}. If you detect Thai, Indonesian, or any other language, provide a clear translation. If there's no clear speech or just noise, respond with 'No speech detected'."
+            # Create enhanced prompt for translation with language detection
+            prompt = f"""Listen to this audio and:
+1. Detect the source language
+2. Transcribe what you hear
+3. Translate it to {target_lang}
+
+Respond in this exact format:
+SOURCE_LANGUAGE: [detected language code like 'en', 'th', 'id', etc.]
+ORIGINAL: [transcribed text]
+TRANSLATED: [translation to {target_lang}]
+
+If there's no clear speech, respond with 'No speech detected'."""
             
             # Call OpenAI API
             completion = self.client.chat.completions.create(
@@ -490,13 +699,40 @@ class RealtimeVoiceTranslator:
             # Filter out "No speech detected" responses
             if "no speech detected" in response.lower() or "no clear speech" in response.lower():
                 return None
-                
-            return response
+            
+            # Parse the structured response
+            return self.parse_openai_audio_response(response, target_lang)
             
         except Exception as e:
             if "does not exist" in str(e) or "model_not_found" in str(e):
                 return f"Model '{model}' not available. Try GPT-4o Audio Preview or Whisper-1."
             raise e
+    
+    def parse_openai_audio_response(self, response, target_lang):
+        """Parse OpenAI audio response and format it"""
+        try:
+            lines = response.strip().split('\n')
+            source_lang = 'unknown'
+            original_text = ''
+            translated_text = ''
+            
+            for line in lines:
+                if line.startswith('SOURCE_LANGUAGE:'):
+                    source_lang = line.replace('SOURCE_LANGUAGE:', '').strip()
+                elif line.startswith('ORIGINAL:'):
+                    original_text = line.replace('ORIGINAL:', '').strip()
+                elif line.startswith('TRANSLATED:'):
+                    translated_text = line.replace('TRANSLATED:', '').strip()
+            
+            if original_text and translated_text:
+                return self.format_translation_with_detection(original_text, translated_text, source_lang, target_lang)
+            else:
+                # Fallback: treat entire response as translation
+                return f"🌐 (Auto-detected): {response}\n-------------------------"
+                
+        except Exception as e:
+            print(f"Parsing error: {e}")
+            return f"🌐 Translation: {response}\n-------------------------"
     
     def translate_with_whisper(self, wav_data, target_lang):
         """Translate using Whisper transcription + GPT translation"""
@@ -504,21 +740,30 @@ class RealtimeVoiceTranslator:
             # Use Whisper for transcription
             transcription = self.client.audio.transcriptions.create(
                 model="whisper-1",
-                file=("audio.wav", wav_data, "audio/wav")
+                file=("audio.wav", wav_data, "audio/wav"),
+                response_format="verbose_json"
             )
             
             if transcription.text.strip():
+                original_text = transcription.text.strip()
+                
+                # Detect source language
+                detected_lang = getattr(transcription, 'language', 'unknown')
+                
                 # Translate the transcribed text
                 translation_response = self.client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[
                         {
                             "role": "user", 
-                            "content": f"Translate this text to {target_lang}. If it's already in {target_lang}, just return the original text: {transcription.text}"
+                            "content": f"Translate this text to {target_lang}. If it's already in {target_lang}, just return the original text: {original_text}"
                         }
                     ]
                 )
-                return translation_response.choices[0].message.content
+                translated_text = translation_response.choices[0].message.content
+                
+                # Format with language detection
+                return self.format_translation_with_detection(original_text, translated_text, detected_lang, target_lang)
             else:
                 return None
                 
@@ -536,14 +781,21 @@ class RealtimeVoiceTranslator:
                 # Use Whisper for transcription
                 transcription = self.client.audio.transcriptions.create(
                     model="whisper-1",
-                    file=("audio.wav", wav_data, "audio/wav")
+                    file=("audio.wav", wav_data, "audio/wav"),
+                    response_format="verbose_json"
                 )
                 
                 if transcription.text.strip():
+                    original_text = transcription.text.strip()
+                    detected_lang = getattr(transcription, 'language', 'unknown')
+                    
                     # Translate with Gemini
-                    prompt = f"Translate this text to {target_lang}. If it's already in {target_lang}, just return the original text: {transcription.text}"
+                    prompt = f"Translate this text to {target_lang}. If it's already in {target_lang}, just return the original text: {original_text}"
                     response = self.gemini_client.generate_content(prompt)
-                    return response.text
+                    translated_text = response.text
+                    
+                    # Format with language detection
+                    return self.format_translation_with_detection(original_text, translated_text, detected_lang, target_lang)
                 else:
                     return None
             else:
@@ -553,6 +805,29 @@ class RealtimeVoiceTranslator:
             if "API_KEY_INVALID" in str(e):
                 return "Invalid Gemini API key. Please check your configuration."
             raise e
+    
+    def format_translation_with_detection(self, original_text, translated_text, detected_lang, target_lang):
+        """Format translation with language detection info"""
+        try:
+            # Get source language info
+            source_flag, source_name = self.get_language_flag_and_name(detected_lang)
+            
+            # Get target language info
+            target_flag, target_name = self.get_language_flag_and_name(target_lang)
+            
+            # Detect confidence (simulate for now, could be enhanced)
+            confidence = 85  # Default confidence
+            
+            # Format the translation
+            formatted = f"{source_flag} ({source_name} - {confidence}%): {original_text}\n"
+            formatted += f"{target_flag} ({target_name}): {translated_text}\n"
+            formatted += "-------------------------"
+            
+            return formatted
+            
+        except Exception as e:
+            print(f"Formatting error: {e}")
+            return f"Original: {original_text}\nTranslated: {translated_text}\n-------------------------"
     
     def update_translation_display(self):
         """Update translation display"""
@@ -572,10 +847,21 @@ class RealtimeVoiceTranslator:
     
     def add_translation_to_display(self, translation):
         """Add translation to display"""
+        # Add to main window
         self.translation_text.insert(tk.END, translation + "\n\n")
         self.translation_text.see(tk.END)
         
-        # Keep only last 50 translations to prevent memory issues
+        # Add to minimized window if enabled
+        if self.is_minimized and self.minimized_window and hasattr(self.minimized_window, 'translation_text'):
+            self.minimized_window.translation_text.insert(tk.END, translation + "\n\n")
+            self.minimized_window.translation_text.see(tk.END)
+            
+            # Keep minimized window content limited
+            mini_lines = self.minimized_window.translation_text.get("1.0", tk.END).split("\n")
+            if len(mini_lines) > 30:  # Keep only last 10 translations in mini window
+                self.minimized_window.translation_text.delete("1.0", f"{len(mini_lines)-30}.0")
+        
+        # Keep only last 50 translations to prevent memory issues in main window
         lines = self.translation_text.get("1.0", tk.END).split("\n")
         if len(lines) > 100:  # 50 translations * 2 lines each
             # Remove oldest translations
@@ -592,6 +878,10 @@ class RealtimeVoiceTranslator:
         """Cleanup resources"""
         self.is_recording = False
         self.is_translating = False
+        
+        # Close minimized window
+        if self.minimized_window:
+            self.minimized_window.destroy()
         
         if hasattr(self, 'audio'):
             self.audio.terminate()
