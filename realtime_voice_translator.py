@@ -55,7 +55,8 @@ class RealtimeVoiceTranslator:
                 'audio_threshold': 500,  # Minimum audio level to process
                 'translation_model': 'gpt-4o-audio-preview',
                 'selected_audio_model': 'gpt-4o-audio-preview',
-                'enable_minimized': False
+                'enable_minimized': False,
+                'always_on_top': True
             }
             self.save_config()
     
@@ -185,7 +186,7 @@ class RealtimeVoiceTranslator:
         """Setup the GUI"""
         self.root = tk.Tk()
         self.root.title("🌍 Real-time Voice Translator")
-        self.root.geometry("600x700")
+        self.root.geometry("650x850")
         
         # Colors
         self.colors = {
@@ -255,24 +256,28 @@ class RealtimeVoiceTranslator:
         settings_frame = tk.Frame(config_frame, bg=self.colors['bg'])
         settings_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
         
-        # Target language
-        lang_frame = tk.Frame(settings_frame, bg=self.colors['bg'])
-        lang_frame.pack(fill=tk.X, pady=(0, 10))
+        # Two-column layout for Target Language and Audio Model
+        two_column_frame = tk.Frame(settings_frame, bg=self.colors['bg'])
+        two_column_frame.pack(fill=tk.X, pady=(0, 10))
         
-        tk.Label(lang_frame, text="Target Language:", 
+        # Left column - Target Language
+        left_column = tk.Frame(two_column_frame, bg=self.colors['bg'])
+        left_column.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        tk.Label(left_column, text="Target Language:", 
                 fg=self.colors['text'], bg=self.colors['bg']).pack(side=tk.LEFT)
         
         self.target_lang_var = tk.StringVar(value=self.config.get('target_language', 'English'))
-        target_lang_combo = ttk.Combobox(lang_frame, textvariable=self.target_lang_var,
+        target_lang_combo = ttk.Combobox(left_column, textvariable=self.target_lang_var,
                                        values=['English', 'Nepali', 'Hindi', 'Spanish', 'French', 'German', 'Chinese', 'Japanese'],
                                        state='readonly', width=15)
-        target_lang_combo.pack(side=tk.LEFT, padx=(10, 0))
+        target_lang_combo.pack(side=tk.LEFT, padx=(10, 20))
         
-        # Audio model selection
-        model_frame = tk.Frame(settings_frame, bg=self.colors['bg'])
-        model_frame.pack(fill=tk.X, pady=(0, 10))
+        # Right column - Audio Model
+        right_column = tk.Frame(two_column_frame, bg=self.colors['bg'])
+        right_column.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        tk.Label(model_frame, text="Audio Model:", 
+        tk.Label(right_column, text="Audio Model:", 
                 fg=self.colors['text'], bg=self.colors['bg']).pack(side=tk.LEFT)
         
         # Find current model display name
@@ -297,11 +302,49 @@ class RealtimeVoiceTranslator:
         
         self.audio_model_var = tk.StringVar(value=current_display_name)
         
-        audio_model_combo = ttk.Combobox(model_frame, textvariable=self.audio_model_var,
+        audio_model_combo = ttk.Combobox(right_column, textvariable=self.audio_model_var,
                                        values=list(self.audio_models.keys()),
                                        state='readonly', width=25)
         audio_model_combo.pack(side=tk.LEFT, padx=(10, 0))
         audio_model_combo.bind('<<ComboboxSelected>>', self.on_audio_model_change)
+        
+        # Additional options checkboxes
+        options_frame = tk.Frame(settings_frame, bg=self.colors['bg'])
+        options_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        # Left side - Enable minimized translator
+        self.minimized_var = tk.BooleanVar(value=self.config.get('enable_minimized', False))
+        self.minimized_cb = tk.Checkbutton(
+            options_frame,
+            text="📱 Enable Minimized Translator",
+            variable=self.minimized_var,
+            command=self.toggle_minimized_mode,
+            bg=self.colors['bg'],
+            fg=self.colors['text'],
+            selectcolor=self.colors['secondary'],
+            activebackground=self.colors['bg'],
+            activeforeground=self.colors['accent'],
+            font=('Arial', 10),
+            relief='flat'
+        )
+        self.minimized_cb.pack(side=tk.LEFT, anchor=tk.W)
+        
+        # Right side - Always on top toggle
+        self.always_on_top_var = tk.BooleanVar(value=self.config.get('always_on_top', True))
+        self.always_on_top_cb = tk.Checkbutton(
+            options_frame,
+            text="📌 Always on Top",
+            variable=self.always_on_top_var,
+            command=self.toggle_always_on_top,
+            bg=self.colors['bg'],
+            fg=self.colors['text'],
+            selectcolor=self.colors['secondary'],
+            activebackground=self.colors['bg'],
+            activeforeground=self.colors['accent'],
+            font=('Arial', 10),
+            relief='flat'
+        )
+        self.always_on_top_cb.pack(side=tk.LEFT, anchor=tk.W, padx=(30, 0))
         
         # Save config button
         save_btn = tk.Button(config_frame, text="💾 Save Settings", 
@@ -310,10 +353,34 @@ class RealtimeVoiceTranslator:
                            font=('Arial', 9), relief='flat')
         save_btn.pack(pady=10)
         
-        # Control buttons
+        # Control buttons with audio level
         control_frame = tk.Frame(main_frame, bg=self.colors['bg'])
         control_frame.pack(fill=tk.X, pady=(0, 20))
         
+        # Audio level indicator (moved to left side)
+        self.audio_level_var = tk.DoubleVar()
+        
+        # Audio level label with info icon
+        audio_label_frame = tk.Frame(control_frame, bg=self.colors['bg'])
+        audio_label_frame.pack(side=tk.LEFT)
+        
+        tk.Label(audio_label_frame, text="Audio Level:", 
+                fg=self.colors['text'], bg=self.colors['bg']).pack(side=tk.LEFT)
+        
+        # Info icon with tooltip
+        info_label = tk.Label(audio_label_frame, text="ℹ️", 
+                             fg=self.colors['accent'], bg=self.colors['bg'],
+                             font=('Arial', 10), cursor='hand2')
+        info_label.pack(side=tk.LEFT, padx=(5, 0))
+        
+        # Create tooltip for info icon
+        self.create_tooltip(info_label, "If voice is not being detected:\n• Open Settings → System → Sound\n• Increase microphone volume\n• Check microphone permissions")
+        
+        self.audio_level_bar = ttk.Progressbar(control_frame, variable=self.audio_level_var,
+                                             maximum=100, length=150)
+        self.audio_level_bar.pack(side=tk.LEFT, padx=(10, 20))
+        
+        # Start/Stop translation button
         self.toggle_btn = tk.Button(control_frame, text="🎤 Start Translation", 
                                   command=self.toggle_translation,
                                   bg=self.colors['success'], fg='white',
@@ -328,18 +395,6 @@ class RealtimeVoiceTranslator:
                                  font=('Arial', 10), relief='flat',
                                  padx=15, pady=8)
         self.clear_btn.pack(side=tk.LEFT)
-        
-        # Audio level indicator
-        self.audio_level_var = tk.DoubleVar()
-        audio_level_frame = tk.Frame(main_frame, bg=self.colors['bg'])
-        audio_level_frame.pack(fill=tk.X, pady=(0, 20))
-        
-        tk.Label(audio_level_frame, text="Audio Level:", 
-                fg=self.colors['text'], bg=self.colors['bg']).pack(side=tk.LEFT)
-        
-        self.audio_level_bar = ttk.Progressbar(audio_level_frame, variable=self.audio_level_var,
-                                             maximum=100, length=200)
-        self.audio_level_bar.pack(side=tk.LEFT, padx=(10, 0))
         
         # Translation display
         translation_frame = tk.LabelFrame(main_frame, text="Live Translation", 
@@ -358,28 +413,50 @@ class RealtimeVoiceTranslator:
         )
         self.translation_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Always on top
-        self.root.attributes('-topmost', True)
+        # Set always on top based on config
+        always_on_top = self.config.get('always_on_top', True)
+        self.root.attributes('-topmost', always_on_top)
         
-        # Minimized translator checkbox
-        minimized_frame = tk.Frame(main_frame, bg=self.colors['bg'])
-        minimized_frame.pack(fill=tk.X, pady=(0, 10))
+        # Set up proper window close protocol
+        self.root.protocol("WM_DELETE_WINDOW", self.on_main_window_close)
+    
+    def create_tooltip(self, widget, text):
+        """Create a tooltip for a widget"""
+        def on_enter(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.configure(bg='#2d2d2d')
+            
+            # Make tooltip always on top if main window is always on top
+            always_on_top = self.config.get('always_on_top', True)
+            tooltip.attributes('-topmost', always_on_top)
+            
+            # Position tooltip near the widget
+            x = widget.winfo_rootx() + 25
+            y = widget.winfo_rooty() + 25
+            tooltip.geometry(f"+{x}+{y}")
+            
+            label = tk.Label(tooltip, text=text, 
+                           bg='#2d2d2d', fg='white',
+                           font=('Arial', 9), 
+                           justify=tk.LEFT,
+                           padx=8, pady=6)
+            label.pack()
+            
+            widget.tooltip = tooltip
         
-        self.minimized_var = tk.BooleanVar(value=self.config.get('enable_minimized', False))
-        self.minimized_cb = tk.Checkbutton(
-            minimized_frame,
-            text="📱 Enable Minimized Translator",
-            variable=self.minimized_var,
-            command=self.toggle_minimized_mode,
-            bg=self.colors['bg'],
-            fg=self.colors['text'],
-            selectcolor=self.colors['secondary'],
-            activebackground=self.colors['bg'],
-            activeforeground=self.colors['accent'],
-            font=('Arial', 10),
-            relief='flat'
-        )
-        self.minimized_cb.pack(anchor=tk.W)
+        def on_leave(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                del widget.tooltip
+        
+        widget.bind('<Enter>', on_enter)
+        widget.bind('<Leave>', on_leave)
+    
+    def on_main_window_close(self):
+        """Handle main window close event"""
+        self.cleanup()
+        self.root.destroy()
     
     def save_settings(self):
         """Save current settings"""
@@ -427,6 +504,18 @@ class RealtimeVoiceTranslator:
         else:
             self.close_minimized_window()
     
+    def toggle_always_on_top(self):
+        """Toggle always on top mode"""
+        self.config['always_on_top'] = self.always_on_top_var.get()
+        self.save_config()
+        
+        # Apply to main window only
+        self.root.attributes('-topmost', self.always_on_top_var.get())
+        
+        # Mini translator window should always stay on top (independent of main window setting)
+        if self.minimized_window:
+            self.minimized_window.attributes('-topmost', True)
+    
     def create_minimized_window(self):
         """Create minimized translator window"""
         if self.minimized_window:
@@ -444,7 +533,7 @@ class RealtimeVoiceTranslator:
         
         self.minimized_window.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
         self.minimized_window.configure(bg=self.colors['bg'])
-        self.minimized_window.attributes('-topmost', True)
+        self.minimized_window.attributes('-topmost', True)  # Mini translator always stays on top
         self.minimized_window.attributes('-alpha', 0.95)
         
         # Prevent window from being closed directly
@@ -659,12 +748,13 @@ class RealtimeVoiceTranslator:
             
             # Create enhanced prompt for translation with language detection
             prompt = f"""Listen to this audio and:
-1. Detect the source language
+1. Detect the source language with confidence level
 2. Transcribe what you hear
 3. Translate it to {target_lang}
 
 Respond in this exact format:
 SOURCE_LANGUAGE: [detected language code like 'en', 'th', 'id', etc.]
+CONFIDENCE: [confidence percentage 0-100]
 ORIGINAL: [transcribed text]
 TRANSLATED: [translation to {target_lang}]
 
@@ -713,19 +803,25 @@ If there's no clear speech, respond with 'No speech detected'."""
         try:
             lines = response.strip().split('\n')
             source_lang = 'unknown'
+            confidence = 85  # Default fallback
             original_text = ''
             translated_text = ''
             
             for line in lines:
                 if line.startswith('SOURCE_LANGUAGE:'):
                     source_lang = line.replace('SOURCE_LANGUAGE:', '').strip()
+                elif line.startswith('CONFIDENCE:'):
+                    try:
+                        confidence = int(line.replace('CONFIDENCE:', '').strip().replace('%', ''))
+                    except ValueError:
+                        confidence = 85  # Fallback if parsing fails
                 elif line.startswith('ORIGINAL:'):
                     original_text = line.replace('ORIGINAL:', '').strip()
                 elif line.startswith('TRANSLATED:'):
                     translated_text = line.replace('TRANSLATED:', '').strip()
             
             if original_text and translated_text:
-                return self.format_translation_with_detection(original_text, translated_text, source_lang, target_lang)
+                return self.format_translation_with_detection(original_text, translated_text, source_lang, target_lang, confidence)
             else:
                 # Fallback: treat entire response as translation
                 return f"🌐 (Auto-detected): {response}\n-------------------------"
@@ -806,7 +902,7 @@ If there's no clear speech, respond with 'No speech detected'."""
                 return "Invalid Gemini API key. Please check your configuration."
             raise e
     
-    def format_translation_with_detection(self, original_text, translated_text, detected_lang, target_lang):
+    def format_translation_with_detection(self, original_text, translated_text, detected_lang, target_lang, confidence=None):
         """Format translation with language detection info"""
         try:
             # Get source language info
@@ -815,8 +911,9 @@ If there's no clear speech, respond with 'No speech detected'."""
             # Get target language info
             target_flag, target_name = self.get_language_flag_and_name(target_lang)
             
-            # Detect confidence (simulate for now, could be enhanced)
-            confidence = 85  # Default confidence
+            # Use provided confidence or detect it
+            if confidence is None:
+                _, confidence = self.detect_language_from_text(original_text)
             
             # Format the translation
             formatted = f"{source_flag} ({source_name} - {confidence}%): {original_text}\n"
@@ -879,9 +976,14 @@ If there's no clear speech, respond with 'No speech detected'."""
         self.is_recording = False
         self.is_translating = False
         
-        # Close minimized window
+        # Close minimized window safely
         if self.minimized_window:
-            self.minimized_window.destroy()
+            try:
+                self.minimized_window.destroy()
+            except tk.TclError:
+                # Window already destroyed, ignore the error
+                pass
+            self.minimized_window = None
         
         if hasattr(self, 'audio'):
             self.audio.terminate()
