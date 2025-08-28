@@ -4,13 +4,14 @@ A Python GUI application that provides real-time voice translation during calls.
 
 ## Features
 
-- 🎤 **Real-time Audio Capture**: Continuously monitors audio input
+- 🎤 **Real-time Audio Capture**: Continuously monitors audio input (5-second intervals)
 - 🌍 **Multi-language Translation**: Supports translation from any language to English (or other target languages)
-- 🤖 **OpenAI Integration**: Uses GPT-4o-audio-preview for accurate translation
-- 📱 **Modern GUI**: Clean, dark-themed interface
+- 🤖 **Multiple AI Models**: Choose from GPT-4o Audio, Whisper-1, and Gemini models
+- 📱 **Modern GUI**: Clean, dark-themed interface with single toggle button
 - ⚡ **Live Updates**: Translations appear instantly with timestamps
 - 🔊 **Audio Level Monitoring**: Visual feedback of audio input levels
 - 📌 **Always on Top**: Window stays visible during calls
+- 🗑️ **Clear Function**: Easy-to-use clear button for translations
 
 ## Installation
 
@@ -31,9 +32,15 @@ pipwin install pyaudio
 
 Or download the appropriate wheel file from: https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio
 
-### 3. Get OpenAI API Key
+### 3. Get API Keys
 
+**OpenAI API Key:**
 1. Go to https://platform.openai.com/api-keys
+2. Create a new API key
+3. Copy the key for use in the application
+
+**Gemini API Key (Optional):**
+1. Go to https://makersuite.google.com/app/apikey
 2. Create a new API key
 3. Copy the key for use in the application
 
@@ -48,15 +55,22 @@ python realtime_voice_translator.py
 ### 2. Configure Settings
 
 1. Enter your OpenAI API key in the configuration section
-2. Select your target language (default: English)
-3. Click "💾 Save Settings"
+2. (Optional) Enter your Gemini API key for Google's models
+3. Select your target language (default: English)
+4. Choose your preferred audio model:
+   - **GPT-4o Audio Preview**: Best quality, direct audio processing (OpenAI)
+   - **Whisper-1**: Fast transcription + translation (cost-effective, OpenAI)
+   - **Gemini 1.5 Flash**: Fast and efficient (Google)
+   - **Gemini 1.5 Pro**: High quality (Google)
+5. Click "💾 Save Settings"
 
 ### 3. Start Translation
 
-1. Click "🎤 Start Translation"
-2. The application will start monitoring your microphone
+1. Click "🎤 Start Translation" (button will change to "⏹️ Stop Translation")
+2. The application will start monitoring your microphone every 5 seconds
 3. Speak or have others speak in Thai, Indonesian, or any language
 4. Translations will appear in real-time in the text area
+5. Click the same button again to stop translation
 
 ### 4. During Calls
 
@@ -74,6 +88,7 @@ The application creates a `translator_config.json` file with these settings:
 - `target_language`: Target language for translation
 - `audio_threshold`: Minimum audio level to process (reduces noise)
 - `translation_model`: OpenAI model to use
+- `selected_audio_model`: Currently selected audio processing model
 
 ## Troubleshooting
 
@@ -101,6 +116,8 @@ The application creates a `translator_config.json` file with these settings:
 2. **Stable Internet**: Translation requires internet connection to OpenAI
 3. **Proper Positioning**: Keep the app window visible but not blocking your call interface
 4. **Language Detection**: The app auto-detects source language, works best with clear speech
+5. **Model Selection**: Use Whisper-1 for cost-effective transcription, GPT-4o Audio for best quality
+6. **5-Second Intervals**: The app processes audio every 5 seconds for complete sentences
 
 ## Supported Languages
 
@@ -117,6 +134,6 @@ You can modify the target language list in the code to add more languages.
 ## Cost Considerations
 
 - Uses OpenAI's GPT-4o-audio-preview model
-- Processes audio every 3 seconds when speech is detected
+- Processes audio every 5 seconds when speech is detected
 - Check OpenAI pricing for audio processing costs
 - Consider adjusting `audio_threshold` to reduce unnecessary API calls

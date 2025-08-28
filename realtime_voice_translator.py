@@ -18,6 +18,7 @@ class RealtimeVoiceTranslator:
         self.setup_config()
         self.setup_audio()
         self.setup_openai()
+        self.setup_gemini()
         self.setup_gui()
         
         # Threading
@@ -31,7 +32,7 @@ class RealtimeVoiceTranslator:
         self.sample_rate = 16000
         self.channels = 1
         self.audio_format = pyaudio.paInt16
-        self.record_seconds = 3  # Process audio every 3 seconds
+        self.record_seconds = 5  # Process audio every 5 seconds
         
         # Start background processing
         self.start_background_threads()
@@ -44,10 +45,12 @@ class RealtimeVoiceTranslator:
         except FileNotFoundError:
             self.config = {
                 'openai_api_key': '',
+                'gemini_api_key': '',
                 'source_language': 'auto',  # auto-detect
                 'target_language': 'English',
                 'audio_threshold': 500,  # Minimum audio level to process
-                'translation_model': 'gpt-4o-audio-preview'
+                'translation_model': 'gpt-4o-audio-preview',
+                'selected_audio_model': 'gpt-4o-audio-preview'
             }
             self.save_config()
     
@@ -67,6 +70,20 @@ class RealtimeVoiceTranslator:
             self.client = OpenAI(api_key=api_key)
         else:
             self.client = None
+    
+    def setup_gemini(self):
+        """Initialize Gemini client"""
+        try:
+            import google.generativeai as genai
+            api_key = self.config.get('gemini_api_key', '')
+            if api_key:
+                genai.configure(api_key=api_key)
+                self.gemini_client = genai.GenerativeModel('gemini-1.5-flash')
+            else:
+                self.gemini_client = None
+        except ImportError:
+            self.gemini_client = None
+            print("Gemini not available. Install google-generativeai: pip install google-generativeai")
     
     def setup_gui(self):
         """Setup the GUI"""
@@ -112,17 +129,39 @@ class RealtimeVoiceTranslator:
                                    font=('Arial', 10, 'bold'))
         config_frame.pack(fill=tk.X, pady=(0, 20))
         
-        # API Key
-        tk.Label(config_frame, text="OpenAI API Key:", 
-                fg=self.colors['text'], bg=self.colors['bg']).pack(anchor=tk.W, padx=10, pady=(10, 5))
+        # API Keys
+        api_keys_frame = tk.Frame(config_frame, bg=self.colors['bg'])
+        api_keys_frame.pack(fill=tk.X, padx=10, pady=(10, 10))
         
-        self.api_key_entry = tk.Entry(config_frame, show="*", width=50)
-        self.api_key_entry.pack(padx=10, pady=(0, 10))
+        # OpenAI API Key
+        openai_frame = tk.Frame(api_keys_frame, bg=self.colors['bg'])
+        openai_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        tk.Label(openai_frame, text="OpenAI API Key:", 
+                fg=self.colors['text'], bg=self.colors['bg']).pack(anchor=tk.W)
+        
+        self.api_key_entry = tk.Entry(openai_frame, show="*", width=50)
+        self.api_key_entry.pack(fill=tk.X, pady=(2, 0))
         self.api_key_entry.insert(0, self.config.get('openai_api_key', ''))
         
-        # Language settings
-        lang_frame = tk.Frame(config_frame, bg=self.colors['bg'])
-        lang_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        # Gemini API Key
+        gemini_frame = tk.Frame(api_keys_frame, bg=self.colors['bg'])
+        gemini_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        tk.Label(gemini_frame, text="Gemini API Key (Optional):", 
+                fg=self.colors['text'], bg=self.colors['bg']).pack(anchor=tk.W)
+        
+        self.gemini_key_entry = tk.Entry(gemini_frame, show="*", width=50)
+        self.gemini_key_entry.pack(fill=tk.X, pady=(2, 0))
+        self.gemini_key_entry.insert(0, self.config.get('gemini_api_key', ''))
+        
+        # Language and model settings
+        settings_frame = tk.Frame(config_frame, bg=self.colors['bg'])
+        settings_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        # Target language
+        lang_frame = tk.Frame(settings_frame, bg=self.colors['bg'])
+        lang_frame.pack(fill=tk.X, pady=(0, 10))
         
         tk.Label(lang_frame, text="Target Language:", 
                 fg=self.colors['text'], bg=self.colors['bg']).pack(side=tk.LEFT)
@@ -132,6 +171,41 @@ class RealtimeVoiceTranslator:
                                        values=['English', 'Spanish', 'French', 'German', 'Chinese', 'Japanese'],
                                        state='readonly', width=15)
         target_lang_combo.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Audio model selection
+        model_frame = tk.Frame(settings_frame, bg=self.colors['bg'])
+        model_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        tk.Label(model_frame, text="Audio Model:", 
+                fg=self.colors['text'], bg=self.colors['bg']).pack(side=tk.LEFT)
+        
+        # Find current model display name
+        current_model = self.config.get('selected_audio_model', 'gpt-4o-audio-preview')
+        self.audio_models = {
+            'Whisper-1 (Transcribe + Translate)': 'whisper-1',
+            'GPT-4o Audio Preview': 'gpt-4o-audio-preview',
+            'OpenAI GPT-4o-transcribe': 'openai_gpt4o_transcribe',
+            'OpenAI GPT-4o-mini-transcribe': 'openai_gpt4o_mini_transcribe',
+            'Gemini 1.5 Flash (Audio)': 'gemini-1.5-flash',
+            'Gemini 1.5 Pro (Audio)': 'gemini-1.5-pro',
+            'Gemini 2.5 Flash': 'gemini_2_5_flash',
+            'Gemini 2.5 Pro': 'gemini_2_5_pro',
+        }
+        
+        # Find display name for current model
+        current_display_name = 'GPT-4o Audio Preview'  # default
+        for display_name, model_id in self.audio_models.items():
+            if model_id == current_model:
+                current_display_name = display_name
+                break
+        
+        self.audio_model_var = tk.StringVar(value=current_display_name)
+        
+        audio_model_combo = ttk.Combobox(model_frame, textvariable=self.audio_model_var,
+                                       values=list(self.audio_models.keys()),
+                                       state='readonly', width=25)
+        audio_model_combo.pack(side=tk.LEFT, padx=(10, 0))
+        audio_model_combo.bind('<<ComboboxSelected>>', self.on_audio_model_change)
         
         # Save config button
         save_btn = tk.Button(config_frame, text="💾 Save Settings", 
@@ -144,19 +218,20 @@ class RealtimeVoiceTranslator:
         control_frame = tk.Frame(main_frame, bg=self.colors['bg'])
         control_frame.pack(fill=tk.X, pady=(0, 20))
         
-        self.start_btn = tk.Button(control_frame, text="🎤 Start Translation", 
-                                 command=self.start_translation,
-                                 bg=self.colors['success'], fg='white',
-                                 font=('Arial', 12, 'bold'), relief='flat',
-                                 padx=20, pady=10)
-        self.start_btn.pack(side=tk.LEFT, padx=(0, 10))
+        self.toggle_btn = tk.Button(control_frame, text="🎤 Start Translation", 
+                                  command=self.toggle_translation,
+                                  bg=self.colors['success'], fg='white',
+                                  font=('Arial', 12, 'bold'), relief='flat',
+                                  padx=30, pady=12)
+        self.toggle_btn.pack(side=tk.LEFT, padx=(0, 20))
         
-        self.stop_btn = tk.Button(control_frame, text="⏹️ Stop", 
-                                command=self.stop_translation,
-                                bg=self.colors['error'], fg='white',
-                                font=('Arial', 12, 'bold'), relief='flat',
-                                padx=20, pady=10, state='disabled')
-        self.stop_btn.pack(side=tk.LEFT)
+        # Clear translations button
+        self.clear_btn = tk.Button(control_frame, text="🗑️ Clear", 
+                                 command=self.clear_translations,
+                                 bg=self.colors['secondary'], fg=self.colors['text'],
+                                 font=('Arial', 10), relief='flat',
+                                 padx=15, pady=8)
+        self.clear_btn.pack(side=tk.LEFT)
         
         # Audio level indicator
         self.audio_level_var = tk.DoubleVar()
@@ -193,23 +268,61 @@ class RealtimeVoiceTranslator:
     def save_settings(self):
         """Save current settings"""
         self.config['openai_api_key'] = self.api_key_entry.get()
+        self.config['gemini_api_key'] = self.gemini_key_entry.get()
         self.config['target_language'] = self.target_lang_var.get()
+        
+        # Save selected audio model
+        selected_model_name = self.audio_model_var.get()
+        if selected_model_name in self.audio_models:
+            self.config['selected_audio_model'] = self.audio_models[selected_model_name]
+        
         self.save_config()
         self.setup_openai()
+        self.setup_gemini()
         messagebox.showinfo("Settings", "Settings saved successfully!")
+    
+    def on_audio_model_change(self, event=None):
+        """Handle audio model selection change"""
+        selected_model_name = self.audio_model_var.get()
+        if selected_model_name in self.audio_models:
+            self.config['selected_audio_model'] = self.audio_models[selected_model_name]
+            self.save_config()
+    
+    def toggle_translation(self):
+        """Toggle translation on/off"""
+        if not self.is_recording:
+            self.start_translation()
+        else:
+            self.stop_translation()
+    
+    def clear_translations(self):
+        """Clear all translations from display"""
+        self.translation_text.delete('1.0', tk.END)
     
     def start_translation(self):
         """Start real-time translation"""
-        if not self.client:
-            messagebox.showerror("Error", "Please configure your OpenAI API key first!")
-            return
+        selected_model = self.config.get('selected_audio_model', 'gpt-4o-audio-preview')
+        
+        # Check if we have the required API key for the selected model
+        if selected_model.startswith('gemini'):
+            if not self.gemini_client:
+                messagebox.showerror("Error", "Please configure your Gemini API key first!")
+                return
+        else:
+            if not self.client:
+                messagebox.showerror("Error", "Please configure your OpenAI API key first!")
+                return
         
         self.is_recording = True
         self.is_translating = True
         
-        self.start_btn.config(state='disabled')
-        self.stop_btn.config(state='normal')
-        self.status_label.config(text="● Recording & Translating", fg=self.colors['success'])
+        # Update button appearance
+        self.toggle_btn.config(
+            text="⏹️ Stop Translation",
+            bg=self.colors['error'],
+            activebackground='#ff8a8a'
+        )
+        self.status_label.config(text="● Recording & Translating (5s intervals)", fg=self.colors['success'])
         
         # Start audio recording thread
         self.audio_thread = threading.Thread(target=self.record_audio_continuously, daemon=True)
@@ -220,8 +333,12 @@ class RealtimeVoiceTranslator:
         self.is_recording = False
         self.is_translating = False
         
-        self.start_btn.config(state='normal')
-        self.stop_btn.config(state='disabled')
+        # Update button appearance
+        self.toggle_btn.config(
+            text="🎤 Start Translation",
+            bg=self.colors['success'],
+            activebackground='#45a049'
+        )
         self.status_label.config(text="● Stopped", fg=self.colors['error'])
         self.audio_level_var.set(0)
     
@@ -306,7 +423,7 @@ class RealtimeVoiceTranslator:
                 time.sleep(1)
     
     def translate_audio(self, audio_data):
-        """Translate audio using OpenAI"""
+        """Translate audio using selected AI model"""
         try:
             # Convert audio to WAV format
             wav_buffer = io.BytesIO()
@@ -319,16 +436,34 @@ class RealtimeVoiceTranslator:
             wav_buffer.seek(0)
             wav_data = wav_buffer.read()
             
+            # Get selected model and target language
+            selected_model = self.config.get('selected_audio_model', 'gpt-4o-audio-preview')
+            target_lang = self.config.get('target_language', 'English')
+            
+            # Handle different model types
+            if selected_model.startswith('gemini'):
+                return self.translate_with_gemini(wav_data, target_lang, selected_model)
+            elif selected_model == 'whisper-1':
+                return self.translate_with_whisper(wav_data, target_lang)
+            else:
+                return self.translate_with_openai_audio(wav_data, target_lang, selected_model)
+            
+        except Exception as e:
+            print(f"Translation error: {e}")
+            return f"Translation error: {str(e)}"
+    
+    def translate_with_openai_audio(self, wav_data, target_lang, model):
+        """Translate using OpenAI audio models"""
+        try:
             # Encode to base64
             encoded_audio = base64.b64encode(wav_data).decode('utf-8')
             
             # Create prompt for translation
-            target_lang = self.config.get('target_language', 'English')
             prompt = f"Listen to this audio and translate any speech you hear to {target_lang}. If you detect Thai, Indonesian, or any other language, provide a clear translation. If there's no clear speech or just noise, respond with 'No speech detected'."
             
             # Call OpenAI API
             completion = self.client.chat.completions.create(
-                model=self.config.get('translation_model', 'gpt-4o-audio-preview'),
+                model=model,
                 modalities=["text"],
                 messages=[
                     {
@@ -359,8 +494,65 @@ class RealtimeVoiceTranslator:
             return response
             
         except Exception as e:
-            print(f"Translation error: {e}")
-            return f"Translation error: {str(e)}"
+            if "does not exist" in str(e) or "model_not_found" in str(e):
+                return f"Model '{model}' not available. Try GPT-4o Audio Preview or Whisper-1."
+            raise e
+    
+    def translate_with_whisper(self, wav_data, target_lang):
+        """Translate using Whisper transcription + GPT translation"""
+        try:
+            # Use Whisper for transcription
+            transcription = self.client.audio.transcriptions.create(
+                model="whisper-1",
+                file=("audio.wav", wav_data, "audio/wav")
+            )
+            
+            if transcription.text.strip():
+                # Translate the transcribed text
+                translation_response = self.client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "user", 
+                            "content": f"Translate this text to {target_lang}. If it's already in {target_lang}, just return the original text: {transcription.text}"
+                        }
+                    ]
+                )
+                return translation_response.choices[0].message.content
+            else:
+                return None
+                
+        except Exception as e:
+            raise e
+    
+    def translate_with_gemini(self, wav_data, target_lang, model):
+        """Translate using Gemini models"""
+        try:
+            if not self.gemini_client:
+                return "Gemini API key not configured"
+            
+            # First transcribe with Whisper (if available), then translate with Gemini
+            if self.client:
+                # Use Whisper for transcription
+                transcription = self.client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=("audio.wav", wav_data, "audio/wav")
+                )
+                
+                if transcription.text.strip():
+                    # Translate with Gemini
+                    prompt = f"Translate this text to {target_lang}. If it's already in {target_lang}, just return the original text: {transcription.text}"
+                    response = self.gemini_client.generate_content(prompt)
+                    return response.text
+                else:
+                    return None
+            else:
+                return "OpenAI API key needed for audio transcription with Gemini models"
+                
+        except Exception as e:
+            if "API_KEY_INVALID" in str(e):
+                return "Invalid Gemini API key. Please check your configuration."
+            raise e
     
     def update_translation_display(self):
         """Update translation display"""
