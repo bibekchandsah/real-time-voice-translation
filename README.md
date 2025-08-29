@@ -2,16 +2,21 @@
 
 A Python GUI application that provides real-time voice translation during calls. Perfect for understanding Thai, Indonesian, or any other language in real-time.
 
+![Application Preview](preview.png)
+
+*Modern dark-themed interface with real-time translation capabilities*
+
 ## Features
 
 - 🎤 **Real-time Audio Capture**: Continuously monitors audio input (5-second intervals)
 - 🌍 **Multi-language Translation**: Supports translation from any language to English (or other target languages)
 - 🤖 **Multiple AI Models**: Choose from GPT-4o Audio, Whisper-1, and Gemini models
-- 📱 **Modern GUI**: Clean, dark-themed interface with single toggle button
+- 📱 **Modern GUI**: Clean, dark-themed interface with custom icon and professional styling
 - ⚡ **Live Updates**: Translations appear instantly with timestamps
 - 🔊 **Audio Level Monitoring**: Visual feedback of audio input levels
 - 📌 **Always on Top**: Window stays visible during calls
 - 🗑️ **Clear Function**: Easy-to-use clear button for translations
+- 📱 **Mini Translator**: Optional compact floating window for minimal screen usage
 
 ## Installation
 
@@ -123,6 +128,8 @@ The application creates a `translator_config.json` file with these settings:
 
 The app can translate FROM any language TO:
 - English (default)
+- Nepali
+- Hindi
 - Spanish
 - French
 - German
@@ -130,10 +137,3 @@ The app can translate FROM any language TO:
 - Japanese
 
 You can modify the target language list in the code to add more languages.
-
-## Cost Considerations
-
-- Uses OpenAI's GPT-4o-audio-preview model
-- Processes audio every 5 seconds when speech is detected
-- Check OpenAI pricing for audio processing costs
-- Consider adjusting `audio_threshold` to reduce unnecessary API calls

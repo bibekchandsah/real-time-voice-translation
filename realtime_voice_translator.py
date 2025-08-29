@@ -192,6 +192,16 @@ class RealtimeVoiceTranslator:
         self.root.title("🌍 Real-time Voice Translator")
         self.root.geometry("680x870")
         
+        # Set window icon
+        try:
+            if os.path.exists("icon.png"):
+                icon_image = tk.PhotoImage(file="icon.png")
+                self.root.iconphoto(True, icon_image)
+            elif os.path.exists("icon.ico"):
+                self.root.iconbitmap("icon.ico")
+        except Exception as e:
+            print(f"Could not load icon: {e}")
+        
         # Colors
         self.colors = {
             'bg': '#1a1a1a',
@@ -527,6 +537,16 @@ class RealtimeVoiceTranslator:
         
         self.minimized_window = tk.Toplevel(self.root)
         self.minimized_window.title("🌍 Mini Translator")
+        
+        # Set icon for minimized window too
+        try:
+            if os.path.exists("icon.png"):
+                icon_image = tk.PhotoImage(file="icon.png")
+                self.minimized_window.iconphoto(True, icon_image)
+            elif os.path.exists("icon.ico"):
+                self.minimized_window.iconbitmap("icon.ico")
+        except Exception as e:
+            print(f"Could not load icon for minimized window: {e}")
         
         # Position at top-right corner
         screen_width = self.minimized_window.winfo_screenwidth()
