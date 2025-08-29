@@ -40,6 +40,10 @@ class RealtimeVoiceTranslator:
         
         # Start background processing
         self.start_background_threads()
+        
+        # Auto-open mini translator if enabled in config
+        if self.config.get('enable_minimized', False):
+            self.create_minimized_window()
     
     def setup_config(self):
         """Load or create configuration"""
@@ -186,7 +190,7 @@ class RealtimeVoiceTranslator:
         """Setup the GUI"""
         self.root = tk.Tk()
         self.root.title("🌍 Real-time Voice Translator")
-        self.root.geometry("650x850")
+        self.root.geometry("680x870")
         
         # Colors
         self.colors = {
