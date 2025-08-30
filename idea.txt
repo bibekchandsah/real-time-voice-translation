@@ -1,0 +1,23 @@
+
+git init
+git add .
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/bibekchandsah/real-time-voice-translation.git
+git push -u origin main
+
+
+git remote add origin https://github.com/bibekchandsah/real-time-voice-translation.git
+git branch -M main
+git push -u origin main
+
+🇮🇳 (Hindi - 85%):  धन्यवाद।
+🇺🇸 (English):  Thank you.
+-------------------------
+
+🇮🇳 (Hindi - 95%):  क्या यह ठीक है?
+🇺🇸 (English):  How are you?
+-------------------------
+
+pyinstaller realtime_voice_translator.spec --clean
+pyinstaller --onefile --windowed --icon=icon.ico --add-data "translator_config.json;." --add-data "icon.ico;." --add-data "icon.png;." --hidden-import=google.generativeai --hidden-import=tkinter --hidden-import=pyaudio --hidden-import=numpy --hidden-import=openai realtime_voice_translator.py    0531-05:50
